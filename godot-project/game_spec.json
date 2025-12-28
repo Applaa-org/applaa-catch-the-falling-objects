@@ -1,0 +1,48 @@
+{
+  "game": {
+    "name": "Catch the Falling Objects",
+    "type": "2D",
+    "genre": "arcade",
+    "description": "Catch falling objects with your catcher while avoiding missing them. Score points and try to reach the victory goal!"
+  },
+  "settings": {
+    "window": {
+      "width": 800,
+      "height": 600
+    },
+    "physics": {
+      "gravity": 0
+    }
+  },
+  "player": {
+    "name": "Catcher",
+    "health": 3,
+    "speed": 300,
+    "abilities": ["move_left", "move_right"]
+  },
+  "entities": {
+    "falling_objects": [
+      {
+        "name": "FallingObject",
+        "speed": 100,
+        "damage": 1,
+        "behavior": "fall_down"
+      }
+    ]
+  },
+  "levels": [
+    {
+      "name": "Endless Mode",
+      "background": "space",
+      "obstacles": []
+    }
+  ],
+  "logic": {
+    "winCondition": "catch_50_objects",
+    "loseCondition": "lives_zero",
+    "scoring": {
+      "pointsPerCatch": 1,
+      "victoryScore": 50
+    }
+  }
+}

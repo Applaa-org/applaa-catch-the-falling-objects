@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catch the Falling Objects</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: #222;
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 18px;
+        }
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #666;
+        }
+        input {
+            padding: 8px;
+            font-size: 16px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="lives">Lives: 3</div>
+        <div id="highScore">High Score: 0</div>
+    </div>
+    <div id="startScreen">
+        <h1>Catch the Falling Objects</h1>
+        <p>Use A/D or Left/Right arrows to move the catcher.</p>
+        <p>On mobile, touch and drag left/right.</p>
+        <p>Catch 50 objects to win! Avoid missing them.</p>
+        <input type="text" id="playerName" placeholder="Enter your name" maxlength="20">
+        <br>
+        <button id="startButton">Start Game</button>
+        <button id="closeButton">Close</button>
+    </div>
+    <div id="gameOverScreen" style="display: none;">
+        <h1 id="gameOverTitle">Game Over!</h1>
+        <p id="finalScore">Final Score: 0</p>
+        <button id="restartButton">Try Again</button>
+        <button id="mainMenuButton">Main Menu</button>
+        <button id="closeGameButton">Close</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const ui = document.getElementById('ui');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startButton = document.getElementById('startButton');
+        const closeButton = document.getElementById('closeButton');
+        const restartButton = document.getElementById('restartButton');
+        const mainMenuButton = document.getElementById('mainMenuButton');
+        const closeGameButton = document.getElementById('closeGameButton');
+        const playerNameInput = document.getElementById('playerName');
+
+        let gameState = 'start'; // start, playing, victory, defeat
+        let score = 0;
+        let lives = 3;
+        let highScore = 0;
+        let playerName = '';
+        let catcher = { x: 400, y: 550, width: 100, height: 20, speed: 5 };
+        let objects = [];
+        let lastSpawn = 0;
+        let spawnRate = 2000; // ms
+        let baseSpeed = 2;
+        let currentSpeed = 2;
+        let lastDifficultyIncrease = 0;
+        let touchStartX = 0;
+        let isDragging = false;
+
+        // Load game data from localStorage
+        function loadGameData() {
+            const gameId = 'catch-falling-objects';
+            const data = JSON.parse(localStorage.getItem(`applaa-game-data-${gameId}`) || '{}');
+            highScore = data.highScore || 0;
+            playerName = data.lastPlayerName || '';
+            if (playerName) playerNameInput.value = playerName;
+            updateUI();
+        }
+
+        // Save game data to localStorage
+        function saveGameData() {
+            const gameId = 'catch-falling-objects';
+            const data = {
+                gameId,
+                gameName: 'Catch the Falling Objects',
+                scores: [{ playerName, score, timestamp: new Date().toISOString() }],
+                highScore: Math.max(highScore, score),
+                lastPlayerName: playerName
+            };
+            localStorage.setItem(`applaa-game-data-${gameId}`, JSON.stringify(data));
+        }
+
+        function updateUI() {
+            document.getElementById('score').textContent = `Score: ${score}`;
+            document.getElementById('lives').textContent = `Lives: ${lives}`;
+            document.getElementById('highScore').textContent = `High Score: ${highScore}`;
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            objects = [];
+            catcher.x = 400;
+            currentSpeed = baseSpeed;
+            spawnRate = 2000;
+            lastSpawn = 0;
+            lastDifficultyIncrease = 0;
+            gameState = 'playing';
+            updateUI();
+        }
+
+        function spawnObject() {
+            const obj = {
+                x: Math.random() * (canvas.width - 30) + 15,
+                y: -15,
+                radius: 15,
+                speed: currentSpeed + Math.random() * 1
+            };
+            objects.push(obj);
+        }
+
+        function updateObjects(deltaTime) {
+            for (let i = objects.length - 1; i >= 0; i--) {
+                const obj = objects[i];
+                obj.y += obj.speed;
+
+                // Check collision with catcher
+                if (obj.y + obj.radius >= catcher.y &&
+                    obj.y - obj.radius <= catcher.y + catcher.height &&
+                    obj.x + obj.radius >= catcher.x - catcher.width / 2 &&
+                    obj.x - obj.radius <= catcher.x + catcher.width / 2) {
+                    score++;
+                    if (score > highScore) highScore = score;
+                    objects.splice(i, 1);
+                    continue;
+                }
+
+                // Check if object hits bottom
+                if (obj.y > canvas.height + obj.radius) {
+                    lives--;
+                    objects.splice(i, 1);
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw catcher
+            ctx.fillStyle = '#ff0';
+            ctx.fillRect(catcher.x - catcher.width / 2, catcher.y, catcher.width, catcher.height);
+
+            // Draw objects
+            ctx.fillStyle = '#f00';
+            objects.forEach(obj => {
+                ctx.beginPath();
+                ctx.arc(obj.x, obj.y, obj.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function gameLoop(timestamp) {
+            if (gameState === 'playing') {
+                const deltaTime = timestamp - lastSpawn;
+
+                // Spawn objects
+                if (timestamp - lastSpawn > spawnRate) {
+                    spawnObject();
+                    lastSpawn = timestamp;
+                }
+
+                // Increase difficulty every 10 seconds
+                if (timestamp - lastDifficultyIncrease > 10000) {
+                    currentSpeed += 0.5;
+                    spawnRate = Math.max(500, spawnRate - 100);
+                    lastDifficultyIncrease = timestamp;
+                }
+
+                // Handle input
+                if (keys.left) catcher.x = Math.max(catcher.width / 2, catcher.x - catcher.speed);
+                if (keys.right) catcher.x = Math.min(canvas.width - catcher.width / 2, catcher.x + catcher.speed);
+
+                updateObjects(deltaTime);
+                draw();
+                updateUI();
+
+                // Check win/lose conditions
+                if (score >= 50) {
+                    gameState = 'victory';
+                    showGameOver('Victory!', `Final Score: ${score}`);
+                    saveGameData();
+                } else if (lives <= 0) {
+                    gameState = 'defeat';
+                    showGameOver('Game Over!', `Final Score: ${score}`);
+                    saveGameData();
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showGameOver(title, scoreText) {
+            document.getElementById('gameOverTitle').textContent = title;
+            document.getElementById('finalScore').textContent = scoreText;
+            gameOverScreen.style.display = 'block';
+            ui.style.display = 'none';
+        }
+
+        // Input handling
+        const keys = { left: false, right: false };
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = true;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.left = false;
+            if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
+        });
+
+        // Mobile touch handling
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchStartX = e.touches[0].clientX;
+            isDragging = true;
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            e.preventDefault();
+            const touchX = e.touches[0].clientX;
+            const deltaX = touchX - touchStartX;
+            catcher.x = Math.max(catcher.width / 2, Math.min(canvas.width - catcher.width / 2, catcher.x + deltaX * 0.5));
+            touchStartX = touchX;
+        });
+        canvas.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        // Event listeners
+        startButton.addEventListener('click', () => {
+            playerName = playerNameInput.value || 'Player';
+            startScreen.style.display = 'none';
+            ui.style.display = 'block';
+            resetGame();
+        });
+
+        closeButton.addEventListener('click', () => {
+            window.close();
+        });
+
+        restartButton.addEventListener('click', () => {
+            gameOverScreen.style.display = 'none';
+            ui.style.display = 'block';
+            resetGame();
+        });
+
+        mainMenuButton.addEventListener('click', () => {
+            gameOverScreen.style.display = 'none';
+            startScreen.style.display = 'block';
+            ui.style.display = 'none';
+        });
+
+        closeGameButton.addEventListener('click', () => {
+            window.close();
+        });
+
+        // Initialize
+        loadGameData();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
